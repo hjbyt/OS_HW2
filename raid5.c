@@ -26,9 +26,10 @@
 // Constants
 //
 
-#define SECTORS_PER_BLOCK 4
 #define KILO 1024
+#define SECTORS_PER_BLOCK 4
 #define SECTOR_SIZE (4 * KILO)
+#define BLOCK_SIZE (SECTOR_SIZE * SECTORS_PER_BLOCK)
 
 typedef int bool;
 #define FALSE 0
@@ -50,13 +51,15 @@ typedef struct device_{
 
 int device_count;
 device *devices;
-
+char buffer[SECTOR_SIZE] = {0};
 //
 // Function Declarations
 //
 
 void try_reopen_device(unsigned int device_number);
 void close_device(int device_number);
+bool read_sector(int device_number, int physical_sector);
+bool write_sector(int device_number, int physical_sector);
 void do_raid5(int sector_log);
 
 //
@@ -66,11 +69,15 @@ void do_raid5(int sector_log);
 int main(int argc, char** argv)
 {
 	if (argc == 1) {
-		printf("Usage: ./raid5 <device1> [<device2> <device3> ...]");
+		printf("Usage: ./raid5 <device1> <device2> <device3> [...]");
 		return 0;
 	}
 	
 	device_count = argc - 1;
+	if (device_count <= 2) {
+		printf("Error, raid5 not supported on less then 3 disks");
+		return 0;
+	}
 	device _devices[device_count];
 	devices = _devices;
 	
@@ -133,7 +140,7 @@ void try_reopen_device(unsigned int device_number)
 	device* dev = &devices[device_number];
 	dev->fd = open(dev->path, O_RDWR);
 	if (dev->fd == -1) {
-		fprintf(stderr, "Error, failed to open device %s. (%s)", dev->path, strerror(errno));
+		printf("Error, failed to open device %s. (%s)", dev->path, strerror(errno));
 		return;
 	}
 	dev->is_open = TRUE;
@@ -146,6 +153,80 @@ void close_device(int device_number)
 		close(dev->fd);
 		dev->is_open = FALSE;
 	}
+}
+
+void read_raid5(int logical_sector)
+{
+	int block_num = logical_sector / SECTORS_PER_BLOCK;
+	int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	int stripe_num = block_num / (device_count - 1);
+	int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
+
+	int parity_block_device =  ((device_count - 1) + stripe_num) % device_count;
+	int physical_sector_device = logical_sector % (device_count - 1);
+	physical_sector_device += (physical_sector_device >= parity_block_device) ? 1 : 0;
+
+	// Try reading from original sector
+	if (read_sector(physical_sector_device, physical_sector)) {
+		printf("Operation on device %d, sector %d\n", physical_sector_device, physical_sector);
+	} else {
+		// Try to read from the other disks
+		for (int i = 0; i < device_count; ++i) {
+			if (i == physical_sector_device) continue;
+			if (read_sector(i, physical_sector)) {
+				printf("Operation on device %d, sector %d\n", i, physical_sector);
+			} else {
+				//TODO: what to print ??
+				printf("Operation on bad device %d\n", i);
+				break;
+			}
+		}
+	}
+}
+
+void write_raid5(int logical_sector)
+{
+	//TODO (FML)
+}
+
+bool read_sector(int device_number, int physical_sector)
+{
+	device* dev = &devices[device_number];
+
+	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
+		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		close(device_number);
+		return FALSE;
+	}
+
+	ssize_t bytes_read = read(dev->fd, buffer, sizeof(buffer));
+	if (bytes_read != sizeof(buffer)) {
+		printf("Error reading from sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		close(device_number);
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+bool write_sector(int device_number, int physical_sector)
+{
+	device* dev = &devices[device_number];
+
+	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
+		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		close(device_number);
+		return FALSE;
+	}
+
+	ssize_t bytes_written = write(dev->fd, buffer, sizeof(buffer));
+	if (bytes_written != sizeof(buffer)) {
+		printf("Error writing to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		close(device_number);
+		return FALSE;
+	}
+
+	return TRUE;
 }
 
 void do_raid5(int sector_log)
