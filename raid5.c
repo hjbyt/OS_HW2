@@ -158,21 +158,25 @@ void close_device(int device_number)
 void read_raid5(int logical_sector)
 {
 	int block_num = logical_sector / SECTORS_PER_BLOCK;
+	// Offset of the sector within the block
 	int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
 	int stripe_num = block_num / (device_count - 1);
+	// Offset of physical sector
 	int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
 
-	int parity_block_device =  ((device_count - 1) + stripe_num) % device_count;
-	int physical_sector_device = logical_sector % (device_count - 1);
-	physical_sector_device += (physical_sector_device >= parity_block_device) ? 1 : 0;
+	// Device number of on which the parity block is located
+	int parity_device =  ((device_count - 1) + stripe_num) % device_count;
+	// Device number on which the requested logical sector is stored
+	int sector_device = logical_sector % (device_count - 1);
+	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	// Try reading from original sector
-	if (read_sector(physical_sector_device, physical_sector)) {
-		printf("Operation on device %d, sector %d\n", physical_sector_device, physical_sector);
+	if (read_sector(sector_device, physical_sector)) {
+		printf("Operation on device %d, sector %d\n", sector_device, physical_sector);
 	} else {
 		// Try to read from the other disks
 		for (int i = 0; i < device_count; ++i) {
-			if (i == physical_sector_device) continue;
+			if (i == sector_device) continue;
 			if (read_sector(i, physical_sector)) {
 				printf("Operation on device %d, sector %d\n", i, physical_sector);
 			} else {
