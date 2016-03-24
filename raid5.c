@@ -158,13 +158,14 @@ void close_device(int device_number)
 
 void read_raid5(int logical_sector)
 {
+	// Number of the block on which the logical sector is placed.
 	int block_num = logical_sector / SECTORS_PER_BLOCK;
 	// Offset of the sector within the block
 	int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	// The stripe on which the block is placed
 	int stripe_num = block_num / (device_count - 1);
 	// Offset of physical sector
 	int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
-
 	// Device number of on which the parity block is located
 	int parity_device =  ((device_count - 1) + stripe_num) % device_count;
 	// Device number on which the requested logical sector is stored
@@ -191,12 +192,93 @@ void read_raid5(int logical_sector)
 			return;
 		}
 	}
-
 }
 
 void write_raid5(int logical_sector)
 {
-	//TODO (FML)
+	// Number of the block on which the logical sector is placed.
+	int block_num = logical_sector / SECTORS_PER_BLOCK;
+	// Offset of the sector within the block
+	int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	// The stripe on which the block is placed
+	int stripe_num = block_num / (device_count - 1);
+	// Offset of physical sector
+	int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
+	// Device number of on which the parity block is located
+	int parity_device =  ((device_count - 1) + stripe_num) % device_count;
+	// Device number on which the requested logical sector is stored
+	int sector_device = logical_sector % (device_count - 1);
+	sector_device += (sector_device >= parity_device) ? 1 : 0;
+
+	bool read_old_data = FALSE;
+
+	// Try to access sector device
+	if (devices[sector_device].is_open) {
+		// If parity device isn't open
+		if (!devices[parity_device].is_open) {
+			// Then there is no need to read the old data before writing,
+			// so simply attempt writing to the sector device
+			if (write_sector(sector_device, physical_sector)) {
+				return;
+			} else {
+				print_bad_operation(sector_device);
+				return;
+			}
+		}
+		// Parity device is open
+		else {
+			// Read the old data first, in order to update parity block later.
+			if (read_sector(sector_device, physical_sector)) {
+				read_old_data = TRUE;
+				// Now write new data.
+				// Note: return value isn't checked, because whether
+				// the operation succeeds or not, the parity block still has to be updated.
+				write_sector(sector_device, physical_sector);
+			}
+		}
+	}
+	assert(devices[parity_device].is_open);
+
+	// Update parity block
+	if (read_old_data) {
+		// Read old parity in order to calculate the updated parity.
+		if (read_sector(parity_device, physical_sector)) {
+			// new_parity = old_parity xor old_data xor new_data
+			// Write new parity
+			if (write_sector(parity_device, physical_sector)) {
+				// Operation completed successfully.
+				return;
+			}
+		}
+		// If accessing parity device failed, nothing else can be done.
+		print_bad_operation(parity_device);
+		return;
+	} else {
+		// Old data could not be read,
+		// so we must read all other devices in order to update parity.
+		for (int i = 0; i < device_count; ++i)
+		{
+			if (i == sector_device || i == parity_device) continue;
+			//TODO: should i check if the device is open ???
+			if (!read_sector(i, physical_sector)) {
+				// Can't calculate new parity.
+				//TODO: is this the right message to print?
+				print_bad_operation(i);
+				return;
+			}
+		}
+
+		// new_parity = new_data xor (xor of all non-parity blocks)
+		// Write new parity
+		if (write_sector(parity_device, physical_sector)) {
+			// Operation completed successfully.
+			return;
+		} else {
+			// Parity update failed.
+			print_bad_operation(parity_device);
+			return;
+		}
+	}
 }
 
 void print_operation(int device_number, int physical_sector)
