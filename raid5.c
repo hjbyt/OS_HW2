@@ -200,12 +200,12 @@ void write_raid5(int logical_sector)
 		if (!devices[parity_device].is_open) {
 			// Then there is no need to read the old data before writing,
 			// so simply attempt writing to the sector device.
-			if (write_sector(sector_device, physical_sector)) {
-				return;
-			} else {
+			if (!write_sector(sector_device, physical_sector)) {
+				// Writting failed
 				print_bad_operation(sector_device);
-				return;
 			}
+			// Whether writing was successful or not, there's nothing else to be done.
+			return;
 		}
 		// Parity device is open
 		else {
@@ -214,12 +214,12 @@ void write_raid5(int logical_sector)
 				// Can't read parity, so there is no need to read the old data before writing
 				// (because parity can't be updated),
 				// so simply attempt writing to the sector device.
-				if (write_sector(sector_device, physical_sector)) {
-					return;
-				} else {
+				if (!write_sector(sector_device, physical_sector)) {
+					// Writting failed
 					print_bad_operation(sector_device);
-					return;
 				}
+				// Whether writing was successful or not, there's nothing else to be done.
+				return;
 			}
 
 			// Read the old data, in order to update parity block later.
