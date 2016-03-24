@@ -33,6 +33,7 @@ typedef struct device_{
 int device_count;
 device *devices;
 char buffer[SECTOR_SIZE] = {0};
+int open_devices = 0;
 
 //
 // Function Declarations
@@ -127,6 +128,7 @@ void try_reopen_device(unsigned int device_number)
 		return;
 	}
 	dev->is_open = TRUE;
+	open_devices += 1;
 }
 
 void close_device(int device_number)
@@ -135,6 +137,7 @@ void close_device(int device_number)
 	if (dev->is_open) {
 		close(dev->fd);
 		dev->is_open = FALSE;
+		open_devices -= 1;
 	}
 }
 
@@ -196,7 +199,7 @@ void write_raid5(int logical_sector)
 		// If parity device isn't open
 		if (!devices[parity_device].is_open) {
 			// Then there is no need to read the old data before writing,
-			// so simply attempt writing to the sector device
+			// so simply attempt writing to the sector device.
 			if (write_sector(sector_device, physical_sector)) {
 				return;
 			} else {
@@ -206,7 +209,20 @@ void write_raid5(int logical_sector)
 		}
 		// Parity device is open
 		else {
-			// Read the old data first, in order to update parity block later.
+			// Read parity
+			if (!read_sector(parity_device, physical_sector)) {
+				// Can't read parity, so there is no need to read the old data before writing
+				// (because parity can't be updated),
+				// so simply attempt writing to the sector device.
+				if (write_sector(sector_device, physical_sector)) {
+					return;
+				} else {
+					print_bad_operation(sector_device);
+					return;
+				}
+			}
+
+			// Read the old data, in order to update parity block later.
 			if (read_sector(sector_device, physical_sector)) {
 				read_old_data = TRUE;
 				// Now write new data.
@@ -220,21 +236,23 @@ void write_raid5(int logical_sector)
 
 	// Update parity block
 	if (read_old_data) {
-		// Read old parity in order to calculate the updated parity.
-		if (read_sector(parity_device, physical_sector)) {
-			// new_parity = old_parity xor old_data xor new_data
-			// Write new parity
-			if (write_sector(parity_device, physical_sector)) {
-				// Operation completed successfully.
-				return;
-			}
+		// new_parity = old_parity XOR old_data XOR new_data
+		// Write new parity
+		if (!write_sector(parity_device, physical_sector)) {
+			// Accessing parity device failed
+			print_bad_operation(parity_device);
+
 		}
-		// If accessing parity device failed, nothing else can be done.
-		print_bad_operation(parity_device);
+		// Whether writing was successful or not, there's nothing else to be done.
 		return;
 	} else {
 		// Old data could not be read,
 		// so we must read all other devices in order to update parity.
+		if (open_devices <= device_count - 2) {
+			// Operation can't be completed.
+			//TODO: what to print ??? (print_bad_operation(???);)
+			return;
+		}
 		for (int i = 0; i < device_count; ++i)
 		{
 			if (i == sector_device || i == parity_device) continue;
@@ -246,7 +264,7 @@ void write_raid5(int logical_sector)
 			}
 		}
 
-		// new_parity = new_data xor (xor of all non-parity blocks)
+		// new_parity = new_data XOR (XOR of all non-parity blocks)
 		// Write new parity
 		if (write_sector(parity_device, physical_sector)) {
 			// Operation completed successfully.
