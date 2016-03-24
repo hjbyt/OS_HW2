@@ -58,9 +58,10 @@ char buffer[SECTOR_SIZE] = {0};
 
 void try_reopen_device(unsigned int device_number);
 void close_device(int device_number);
+void print_operation(int device_number, int physical_sector);
+void print_bad_operation(int device_number);
 bool read_sector(int device_number, int physical_sector);
 bool write_sector(int device_number, int physical_sector);
-void do_raid5(int sector_log);
 
 //
 // Implementation
@@ -113,11 +114,11 @@ int main(int argc, char** argv)
 		}
 		// READ
 		else if (!strcmp(cmd, "READ")) {
-			do_raid5(param);
+			read_raid5(param);
 		}
 		//WRITE
 		else if (!strcmp(cmd, "WRITE")) {
-			do_raid5(param);
+			write_raid5(param);
 		}
 		else {
 			printf("Invalid command: %s\n", cmd);
@@ -171,26 +172,41 @@ void read_raid5(int logical_sector)
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	// Try reading from original sector
-	if (read_sector(sector_device, physical_sector)) {
-		printf("Operation on device %d, sector %d\n", sector_device, physical_sector);
-	} else {
-		// Try to read from the other disks
-		for (int i = 0; i < device_count; ++i) {
-			if (i == sector_device) continue;
-			if (read_sector(i, physical_sector)) {
-				printf("Operation on device %d, sector %d\n", i, physical_sector);
-			} else {
-				//TODO: what to print ??
-				printf("Operation on bad device %d\n", i);
-				break;
-			}
+	if (devices[sector_device].is_open && read_sector(sector_device, physical_sector)) {
+		print_operation(sector_device, physical_sector);
+		return;
+	}
+	// Sector device is dead or read failed.
+
+	// Try reading the other devices.
+	// (it's possible to restore the logical sector using the parity block)
+	for (int i = 0; i < device_count; ++i) {
+		if (i == sector_device) continue;
+		//TODO: should i check if the device is open ???
+		if (read_sector(i, physical_sector)) {
+			print_operation(i, physical_sector);
+		} else {
+			//TODO: is this the right message to print?
+			print_bad_operation(i);
+			break;
 		}
 	}
+
 }
 
 void write_raid5(int logical_sector)
 {
 	//TODO (FML)
+}
+
+void print_operation(int device_number, int physical_sector)
+{
+	printf("Operation on device %d, sector %d\n", device_number, physical_sector);
+}
+
+void print_bad_operation(int device_number)
+{
+	printf("Operation on bad device %d\n", device_number);
 }
 
 bool read_sector(int device_number, int physical_sector)
@@ -199,14 +215,14 @@ bool read_sector(int device_number, int physical_sector)
 
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
 		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
-		close(device_number);
+		close_device(device_number);
 		return FALSE;
 	}
 
 	ssize_t bytes_read = read(dev->fd, buffer, sizeof(buffer));
 	if (bytes_read != sizeof(buffer)) {
 		printf("Error reading from sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
-		close(device_number);
+		close_device(device_number);
 		return FALSE;
 	}
 
@@ -219,36 +235,17 @@ bool write_sector(int device_number, int physical_sector)
 
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
 		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
-		close(device_number);
+		close_device(device_number);
 		return FALSE;
 	}
 
 	ssize_t bytes_written = write(dev->fd, buffer, sizeof(buffer));
 	if (bytes_written != sizeof(buffer)) {
 		printf("Error writing to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
-		close(device_number);
+		close_device(device_number);
 		return FALSE;
 	}
 
 	return TRUE;
 }
 
-void do_raid5(int sector_log)
-{
-	// find the relevant device for current sector
-	int block_num = sector_log / SECTORS_PER_BLOCK;
-	int dev_num = block_num % device_count;
-
-	// make sure device didn't fail
-	if (devices[device_count].is_open) {
-		printf("Operation on bad device %d\n", dev_num);
-		return;
-	}
-
-	// find sector inside device
-	int block_start = sector_log / (device_count * SECTORS_PER_BLOCK);
-	int block_off = sector_log % SECTORS_PER_BLOCK;
-	int sector_phys = block_start * SECTORS_PER_BLOCK + block_off;
-
-	printf("Operation on device %d, sector %d\n", dev_num, sector_phys);
-}
