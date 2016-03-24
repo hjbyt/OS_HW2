@@ -172,9 +172,10 @@ void read_raid5(int logical_sector)
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	// Try reading from original sector
-	if (devices[sector_device].is_open && read_sector(sector_device, physical_sector)) {
-		print_operation(sector_device, physical_sector);
-		return;
+	if (devices[sector_device].is_open) {
+		if (read_sector(sector_device, physical_sector)) {
+			return;
+		}
 	}
 	// Sector device is dead or read failed.
 
@@ -183,12 +184,11 @@ void read_raid5(int logical_sector)
 	for (int i = 0; i < device_count; ++i) {
 		if (i == sector_device) continue;
 		//TODO: should i check if the device is open ???
-		if (read_sector(i, physical_sector)) {
-			print_operation(i, physical_sector);
-		} else {
+		if (!read_sector(i, physical_sector)) {
+			// Logical sector can't be restored.
 			//TODO: is this the right message to print?
 			print_bad_operation(i);
-			break;
+			return;
 		}
 	}
 
@@ -226,6 +226,8 @@ bool read_sector(int device_number, int physical_sector)
 		return FALSE;
 	}
 
+	print_operation(device_number, physical_sector);
+
 	return TRUE;
 }
 
@@ -245,6 +247,8 @@ bool write_sector(int device_number, int physical_sector)
 		close_device(device_number);
 		return FALSE;
 	}
+
+	print_operation(device_number, physical_sector);
 
 	return TRUE;
 }
