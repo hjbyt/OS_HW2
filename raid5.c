@@ -1,26 +1,7 @@
 #include <stdio.h>
-#include <dirent.h>
-#include <sys/stat.h>
-#include <sys/types.h>
-#include <fcntl.h> // for open flags
-#include <unistd.h>
-#include <time.h> // for time measurement
-#include <sys/time.h>
+#include <fcntl.h>
 #include <assert.h>
-#include <errno.h> 
-#include <string.h>
-
-//
-// Macros
-//
-
-// Return number of elements in static array
-#define ARRAY_LENGTH(array) (sizeof(array)/sizeof(array[0]))
-//TODO: XXX
-//// Exit with an error message
-//#define ERROR(...) error(EXIT_FAILURE, errno, __VA_ARGS__)
-//// Verify that a condition holds, else exit with an error.
-//#define VERIFY(condition, ...) if (!(condition)) ERROR(__VA_ARGS__)
+#include <errno.h>
 
 //
 // Constants
@@ -52,6 +33,7 @@ typedef struct device_{
 int device_count;
 device *devices;
 char buffer[SECTOR_SIZE] = {0};
+
 //
 // Function Declarations
 //
@@ -173,10 +155,8 @@ void read_raid5(int logical_sector)
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	// Try reading from original sector
-	if (devices[sector_device].is_open) {
-		if (read_sector(sector_device, physical_sector)) {
-			return;
-		}
+	if (devices[sector_device].is_open && read_sector(sector_device, physical_sector)) {
+		return;
 	}
 	// Sector device is dead or read failed.
 
@@ -184,8 +164,7 @@ void read_raid5(int logical_sector)
 	// (it's possible to restore the logical sector using the parity block)
 	for (int i = 0; i < device_count; ++i) {
 		if (i == sector_device) continue;
-		//TODO: should i check if the device is open ???
-		if (!read_sector(i, physical_sector)) {
+		if (!devices[i].is_open  || !read_sector(i, physical_sector)) {
 			// Logical sector can't be restored.
 			//TODO: is this the right message to print?
 			print_bad_operation(i);
@@ -259,8 +238,7 @@ void write_raid5(int logical_sector)
 		for (int i = 0; i < device_count; ++i)
 		{
 			if (i == sector_device || i == parity_device) continue;
-			//TODO: should i check if the device is open ???
-			if (!read_sector(i, physical_sector)) {
+			if (!devices[i].is_open || !read_sector(i, physical_sector)) {
 				// Can't calculate new parity.
 				//TODO: is this the right message to print?
 				print_bad_operation(i);
@@ -295,6 +273,8 @@ bool read_sector(int device_number, int physical_sector)
 {
 	device* dev = &devices[device_number];
 
+	assert(dev->is_open);
+
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
 		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
 		close_device(device_number);
@@ -316,6 +296,8 @@ bool read_sector(int device_number, int physical_sector)
 bool write_sector(int device_number, int physical_sector)
 {
 	device* dev = &devices[device_number];
+
+	assert(dev->is_open);
 
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
 		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
