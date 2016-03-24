@@ -33,7 +33,7 @@ typedef struct device_{
 int device_count;
 device *devices;
 char buffer[SECTOR_SIZE] = {0};
-int open_devices = 0;
+int open_devices_count = 0;
 
 //
 // Function Declarations
@@ -128,7 +128,7 @@ void try_reopen_device(unsigned int device_number)
 		return;
 	}
 	dev->is_open = TRUE;
-	open_devices += 1;
+	open_devices_count += 1;
 }
 
 void close_device(int device_number)
@@ -137,7 +137,7 @@ void close_device(int device_number)
 	if (dev->is_open) {
 		close(dev->fd);
 		dev->is_open = FALSE;
-		open_devices -= 1;
+		open_devices_count -= 1;
 	}
 }
 
@@ -165,6 +165,11 @@ void read_raid5(int logical_sector)
 
 	// Try reading the other devices.
 	// (it's possible to restore the logical sector using the parity block)
+	if (open_devices_count <= device_count - 2) {
+		// Operation can't be completed.
+		//TODO: what to print ??? (print_bad_operation(???);)
+		return;
+	}
 	for (int i = 0; i < device_count; ++i) {
 		if (i == sector_device) continue;
 		if (!devices[i].is_open  || !read_sector(i, physical_sector)) {
@@ -248,7 +253,7 @@ void write_raid5(int logical_sector)
 	} else {
 		// Old data could not be read,
 		// so we must read all other devices in order to update parity.
-		if (open_devices <= device_count - 2) {
+		if (open_devices_count <= device_count - 2) {
 			// Operation can't be completed.
 			//TODO: what to print ??? (print_bad_operation(???);)
 			return;
