@@ -241,7 +241,6 @@ void write_raid5(unsigned int logical_sector)
 				if (!write_sector(parity_device, physical_sector)) {
 					// Accessing parity device failed
 					print_bad_operation(parity_device);
-
 				}
 				// Whether writing was successful or not, there's nothing else to be done.
 				return;
