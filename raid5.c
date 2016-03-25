@@ -32,7 +32,7 @@ typedef struct device_{
 // Globals
 //
 
-int device_count;
+unsigned int device_count;
 device *devices;
 char buffer[SECTOR_SIZE] = {0};
 
@@ -41,13 +41,13 @@ char buffer[SECTOR_SIZE] = {0};
 //
 
 void try_reopen_device(unsigned int device_number);
-void close_device(int device_number);
-void read_raid5(int logical_sector);
-void write_raid5(int logical_sector);
-void print_operation(int device_number, int physical_sector);
-void print_bad_operation(int device_number);
-bool read_sector(int device_number, int physical_sector);
-bool write_sector(int device_number, int physical_sector);
+void close_device(unsigned int device_number);
+void read_raid5(unsigned int logical_sector);
+void write_raid5(unsigned int logical_sector);
+void print_operation(unsigned int device_number, unsigned int physical_sector);
+void print_bad_operation(unsigned int device_number);
+bool read_sector(unsigned int device_number, unsigned int physical_sector);
+bool write_sector(unsigned int device_number, unsigned int physical_sector);
 
 //
 // Implementation
@@ -79,7 +79,7 @@ int main(int argc, char** argv)
 	char line[1024];
 	char cmd[20];
 	int param;
-	while (fgets(line, 1024, stdin) != NULL) {
+	while (fgets(line, sizeof(line), stdin) != NULL) {
 		sscanf(line, "%s %d", cmd, &param);
 
 		// KILL specified device
@@ -100,11 +100,19 @@ int main(int argc, char** argv)
 		}
 		// READ
 		else if (!strcmp(cmd, "READ")) {
-			read_raid5(param);
+			if (param >= 0) {
+				read_raid5(param);
+			} else {
+				printf("Error, Invalid sector number\n");
+			}
 		}
 		//WRITE
 		else if (!strcmp(cmd, "WRITE")) {
-			write_raid5(param);
+			if (param >= 0) {
+				write_raid5(param);
+			} else {
+				printf("Error, Invalid sector number\n");
+			}
 		}
 		else {
 			printf("Invalid command: %s\n", cmd);
@@ -133,7 +141,7 @@ void try_reopen_device(unsigned int device_number)
 	dev->is_open = TRUE;
 }
 
-void close_device(int device_number)
+void close_device(unsigned int device_number)
 {
 	device* dev = &devices[device_number];
 	if (dev->is_open) {
@@ -142,20 +150,20 @@ void close_device(int device_number)
 	}
 }
 
-void read_raid5(int logical_sector)
+void read_raid5(unsigned int logical_sector)
 {
 	// Number of the block on which the logical sector is placed.
-	int block_num = logical_sector / SECTORS_PER_BLOCK;
+	unsigned int block_num = logical_sector / SECTORS_PER_BLOCK;
 	// Offset of the sector within the block
-	int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	unsigned int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
 	// The stripe on which the block is placed
-	int stripe_num = block_num / (device_count - 1);
+	unsigned int stripe_num = block_num / (device_count - 1);
 	// Offset of physical sector
-	int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
+	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
 	// Device number of on which the parity block is located
-	int parity_device =  ((device_count - 1) + stripe_num) % device_count;
+	unsigned int parity_device =  ((device_count - 1) + stripe_num) % device_count;
 	// Device number on which the requested logical sector is stored
-	int sector_device = logical_sector % (device_count - 1);
+	unsigned int sector_device = logical_sector % (device_count - 1);
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	// Try reading from original sector
@@ -166,7 +174,7 @@ void read_raid5(int logical_sector)
 
 	// Try reading the other devices.
 	// (it's possible to restore the logical sector using the parity block)
-	for (int i = 0; i < device_count; ++i) {
+	for (unsigned int i = 0; i < device_count; ++i) {
 		if (i == sector_device) continue;
 		if (!devices[i].is_open  || !read_sector(i, physical_sector)) {
 			// Logical sector can't be restored.
@@ -176,20 +184,20 @@ void read_raid5(int logical_sector)
 	}
 }
 
-void write_raid5(int logical_sector)
+void write_raid5(unsigned int logical_sector)
 {
 	// Number of the block on which the logical sector is placed.
-	int block_num = logical_sector / SECTORS_PER_BLOCK;
+	unsigned int block_num = logical_sector / SECTORS_PER_BLOCK;
 	// Offset of the sector within the block
-	int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	unsigned int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
 	// The stripe on which the block is placed
-	int stripe_num = block_num / (device_count - 1);
+	unsigned int stripe_num = block_num / (device_count - 1);
 	// Offset of physical sector
-	int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
+	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
 	// Device number of on which the parity block is located
-	int parity_device =  ((device_count - 1) + stripe_num) % device_count;
+	unsigned int parity_device =  ((device_count - 1) + stripe_num) % device_count;
 	// Device number on which the requested logical sector is stored
-	int sector_device = logical_sector % (device_count - 1);
+	unsigned int sector_device = logical_sector % (device_count - 1);
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	bool read_old_data = FALSE;
@@ -248,7 +256,7 @@ void write_raid5(int logical_sector)
 	} else {
 		// Old data could not be read,
 		// so we must read all other devices in order to update parity.
-		for (int i = 0; i < device_count; ++i)
+		for (unsigned int i = 0; i < device_count; ++i)
 		{
 			if (i == sector_device || i == parity_device) continue;
 			if (!devices[i].is_open || !read_sector(i, physical_sector)) {
@@ -271,17 +279,17 @@ void write_raid5(int logical_sector)
 	}
 }
 
-void print_operation(int device_number, int physical_sector)
+void print_operation(unsigned int device_number, unsigned int physical_sector)
 {
 	printf("Operation on device %d, sector %d\n", device_number, physical_sector);
 }
 
-void print_bad_operation(int device_number)
+void print_bad_operation(unsigned int device_number)
 {
 	printf("Operation on bad device %d\n", device_number);
 }
 
-bool read_sector(int device_number, int physical_sector)
+bool read_sector(unsigned int device_number, unsigned int physical_sector)
 {
 	device* dev = &devices[device_number];
 
@@ -305,7 +313,7 @@ bool read_sector(int device_number, int physical_sector)
 	return TRUE;
 }
 
-bool write_sector(int device_number, int physical_sector)
+bool write_sector(unsigned int device_number, unsigned int physical_sector)
 {
 	device* dev = &devices[device_number];
 
