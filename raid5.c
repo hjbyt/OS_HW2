@@ -263,7 +263,7 @@ void write_raid5(unsigned int logical_sector)
 
 	// new_parity = new_data XOR (XOR of all non-parity blocks)
 	// Write new parity
-	if (!write_sector(parity_device, physical_sector)) {
+	if (!devices[parity_device].is_open || !write_sector(parity_device, physical_sector)) {
 		// Parity update failed.
 		print_bad_operation(parity_device);
 	}
