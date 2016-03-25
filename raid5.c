@@ -161,9 +161,9 @@ void read_raid5(unsigned int logical_sector)
 	// Offset of physical sector
 	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
 	// Device number of on which the parity block is located
-	unsigned int parity_device =  ((device_count - 1) + stripe_num) % device_count;
+	unsigned int parity_device =  ((device_count - 1) - stripe_num) % device_count;
 	// Device number on which the requested logical sector is stored
-	unsigned int sector_device = logical_sector % (device_count - 1);
+	unsigned int sector_device = block_num % (device_count - 1);
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	// Try reading from original sector
@@ -195,9 +195,9 @@ void write_raid5(unsigned int logical_sector)
 	// Offset of physical sector
 	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
 	// Device number of on which the parity block is located
-	unsigned int parity_device =  ((device_count - 1) + stripe_num) % device_count;
+	unsigned int parity_device =  ((device_count - 1) - stripe_num) % device_count;
 	// Device number on which the requested logical sector is stored
-	unsigned int sector_device = logical_sector % (device_count - 1);
+	unsigned int sector_device = block_num % (device_count - 1);
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
 	// Try accessing sector device
