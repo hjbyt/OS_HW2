@@ -2,6 +2,8 @@
 #include <fcntl.h>
 #include <assert.h>
 #include <errno.h>
+#include <string.h>
+#include <unistd.h>
 
 //
 // Constants
@@ -40,6 +42,8 @@ char buffer[SECTOR_SIZE] = {0};
 
 void try_reopen_device(unsigned int device_number);
 void close_device(int device_number);
+void read_raid5(int logical_sector);
+void write_raid5(int logical_sector);
 void print_operation(int device_number, int physical_sector);
 void print_bad_operation(int device_number);
 bool read_sector(int device_number, int physical_sector);
