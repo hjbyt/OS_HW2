@@ -200,16 +200,14 @@ void write_raid5(unsigned int logical_sector)
 	unsigned int sector_device = logical_sector % (device_count - 1);
 	sector_device += (sector_device >= parity_device) ? 1 : 0;
 
-	bool read_old_data = FALSE;
-
-	// Try to access sector device
+	// Try accessing sector device
 	if (devices[sector_device].is_open) {
 		// If parity device isn't open
 		if (!devices[parity_device].is_open) {
 			// Then there is no need to read the old data before writing,
 			// so simply attempt writing to the sector device.
 			if (!write_sector(sector_device, physical_sector)) {
-				// Writting failed
+				// Writing failed
 				print_bad_operation(sector_device);
 			}
 			// Whether writing was successful or not, there's nothing else to be done.
@@ -223,7 +221,7 @@ void write_raid5(unsigned int logical_sector)
 				// (because parity can't be updated),
 				// so simply attempt writing to the sector device.
 				if (!write_sector(sector_device, physical_sector)) {
-					// Writting failed
+					// Writing failed
 					print_bad_operation(sector_device);
 				}
 				// Whether writing was successful or not, there's nothing else to be done.
@@ -232,50 +230,43 @@ void write_raid5(unsigned int logical_sector)
 
 			// Read the old data, in order to update parity block later.
 			if (read_sector(sector_device, physical_sector)) {
-				read_old_data = TRUE;
+				//TODO: reorder writes??
 				// Now write new data.
 				// Note: return value isn't checked, because whether
 				// the operation succeeds or not, the parity block still has to be updated.
 				write_sector(sector_device, physical_sector);
-			}
-		}
-	}
-	assert(devices[parity_device].is_open);
 
-	// Update parity block
-	if (read_old_data) {
-		// new_parity = old_parity XOR old_data XOR new_data
-		// Write new parity
-		if (!write_sector(parity_device, physical_sector)) {
-			// Accessing parity device failed
-			print_bad_operation(parity_device);
+				// new_parity = old_parity XOR old_data XOR new_data
+				// Write new parity
+				if (!write_sector(parity_device, physical_sector)) {
+					// Accessing parity device failed
+					print_bad_operation(parity_device);
 
-		}
-		// Whether writing was successful or not, there's nothing else to be done.
-		return;
-	} else {
-		// Old data could not be read,
-		// so we must read all other devices in order to update parity.
-		for (unsigned int i = 0; i < device_count; ++i)
-		{
-			if (i == sector_device || i == parity_device) continue;
-			if (!devices[i].is_open || !read_sector(i, physical_sector)) {
-				// Can't calculate new parity.
-				print_bad_operation(i);
+				}
+				// Whether writing was successful or not, there's nothing else to be done.
 				return;
 			}
 		}
+	}
 
-		// new_parity = new_data XOR (XOR of all non-parity blocks)
-		// Write new parity
-		if (write_sector(parity_device, physical_sector)) {
-			// Operation completed successfully.
-			return;
-		} else {
-			// Parity update failed.
-			print_bad_operation(parity_device);
+	// Old data could not be read,
+	// so we must read all other devices in order to update parity.
+	for (unsigned int i = 0; i < device_count; ++i)
+	{
+		if (i == sector_device || i == parity_device) continue;
+		if (!devices[i].is_open || !read_sector(i, physical_sector)) {
+			// Can't calculate new parity.
+			print_bad_operation(i);
 			return;
 		}
+	}
+
+	// new_parity = new_data XOR (XOR of all non-parity blocks)
+	// Write new parity
+	if (!write_sector(parity_device, physical_sector)) {
+		// Parity update failed.
+		print_bad_operation(parity_device);
+
 	}
 }
 
