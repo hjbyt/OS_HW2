@@ -84,7 +84,7 @@ int main(int argc, char** argv)
 			if ((param >= 0 && param < device_count)) {
 				close_device(param);
 			} else {
-				printf("Error, Wrong device number");
+				printf("Error, invalid device number");
 			}
 		}
 		// REPAIR
@@ -92,7 +92,7 @@ int main(int argc, char** argv)
 			if ((param >= 0 && param < device_count)) {
 				try_reopen_device(param);
 			} else {
-				printf("Error, Wrong device number");
+				printf("Error, invalid device number");
 			}
 		}
 		// READ
