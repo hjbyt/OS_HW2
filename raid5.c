@@ -56,13 +56,13 @@ bool write_sector(int device_number, int physical_sector);
 int main(int argc, char** argv)
 {
 	if (argc == 1) {
-		printf("Usage: ./raid5 <device1> <device2> <device3> [...]");
+		printf("Usage: ./raid5 <device1> <device2> <device3> [...]\n");
 		return 0;
 	}
 	
 	device_count = argc - 1;
 	if (device_count <= 2) {
-		printf("Error, raid5 not supported on less then 3 disks");
+		printf("Error, raid5 not supported on less then 3 disks\n");
 		return 0;
 	}
 	device _devices[device_count];
@@ -87,7 +87,7 @@ int main(int argc, char** argv)
 			if ((param >= 0 && param < device_count)) {
 				close_device(param);
 			} else {
-				printf("Error, invalid device number");
+				printf("Error, invalid device number\n");
 			}
 		}
 		// REPAIR
@@ -95,7 +95,7 @@ int main(int argc, char** argv)
 			if ((param >= 0 && param < device_count)) {
 				try_reopen_device(param);
 			} else {
-				printf("Error, invalid device number");
+				printf("Error, invalid device number\n");
 			}
 		}
 		// READ
@@ -127,7 +127,7 @@ void try_reopen_device(unsigned int device_number)
 	device* dev = &devices[device_number];
 	dev->fd = open(dev->path, O_RDWR);
 	if (dev->fd == -1) {
-		printf("Error, failed to open device %s. (%s)", dev->path, strerror(errno));
+		printf("Error, failed to open device %s. (%s)\n", dev->path, strerror(errno));
 		return;
 	}
 	dev->is_open = TRUE;
@@ -288,14 +288,14 @@ bool read_sector(int device_number, int physical_sector)
 	assert(dev->is_open);
 
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
-		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		printf("Error seeking to sector %d in device %s: %s\n", physical_sector, dev->path, strerror(errno));
 		close_device(device_number);
 		return FALSE;
 	}
 
 	ssize_t bytes_read = read(dev->fd, buffer, sizeof(buffer));
 	if (bytes_read != sizeof(buffer)) {
-		printf("Error reading from sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		printf("Error reading from sector %d in device %s: %s\n", physical_sector, dev->path, strerror(errno));
 		close_device(device_number);
 		return FALSE;
 	}
@@ -312,14 +312,14 @@ bool write_sector(int device_number, int physical_sector)
 	assert(dev->is_open);
 
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
-		printf("Error seeking to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		printf("Error seeking to sector %d in device %s: %s\n", physical_sector, dev->path, strerror(errno));
 		close_device(device_number);
 		return FALSE;
 	}
 
 	ssize_t bytes_written = write(dev->fd, buffer, sizeof(buffer));
 	if (bytes_written != sizeof(buffer)) {
-		printf("Error writing to sector %d in device %s: %s", physical_sector, dev->path, strerror(errno));
+		printf("Error writing to sector %d in device %s: %s\n", physical_sector, dev->path, strerror(errno));
 		close_device(device_number);
 		return FALSE;
 	}
