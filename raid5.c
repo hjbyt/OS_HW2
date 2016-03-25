@@ -166,7 +166,6 @@ void read_raid5(int logical_sector)
 		if (i == sector_device) continue;
 		if (!devices[i].is_open  || !read_sector(i, physical_sector)) {
 			// Logical sector can't be restored.
-			//TODO: is this the right message to print?
 			print_bad_operation(i);
 			return;
 		}
@@ -250,7 +249,6 @@ void write_raid5(int logical_sector)
 			if (i == sector_device || i == parity_device) continue;
 			if (!devices[i].is_open || !read_sector(i, physical_sector)) {
 				// Can't calculate new parity.
-				//TODO: is this the right message to print?
 				print_bad_operation(i);
 				return;
 			}
