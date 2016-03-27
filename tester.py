@@ -24,18 +24,18 @@ def kill(device):
 
 
 test1 = ''
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test1 += read(i)
 
 
 test2 = ''
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test2 += write(i)
 
 
 test3 = ''
 test3 += kill(2)
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test3 += read(i)
     test3 += write(i)
 
@@ -43,7 +43,7 @@ for i in range(0, 50 + 1):
 test4 = ''
 test4 += kill(3)
 test4 += kill(2)
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test4 += read(i)
     test4 += write(i)
 
@@ -52,7 +52,7 @@ test5 = ''
 test5 += kill(1)
 test5 += kill(3)
 test5 += kill(2)
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test5 += read(i)
     test5 += write(i)
 
@@ -61,15 +61,15 @@ test6 = ''
 test6 += kill(1)
 test6 += kill(3)
 test6 += kill(2)
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test6 += read(i)
     test6 += write(i)
 test6 += repair(1)
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test6 += read(i)
     test6 += write(i)
 test6 += repair(2)
-for i in range(0, 50 + 1):
+for i in range(0, 500):
     test6 += read(i)
     test6 += write(i)
 
