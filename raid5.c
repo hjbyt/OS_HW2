@@ -43,11 +43,14 @@ char buffer[SECTOR_SIZE] = {0};
 void try_reopen_device(unsigned int device_number);
 void close_device(unsigned int device_number);
 void read_raid5(unsigned int logical_sector);
-void write_raid5_(unsigned int logical_sector);
+void write_raid5(unsigned int logical_sector);
 void calc_offsets_raid5(unsigned int logical_sector,
 		unsigned int* data_device, unsigned int*
 		parity_device, unsigned int*
 		physical_sector);
+void slow_write(unsigned int data_device,
+		unsigned int parity_device,
+		unsigned int physical_sector);
 void print_operation(unsigned int device_number, unsigned int physical_sector);
 void print_bad_operation(unsigned int device_number);
 bool read_sector(unsigned int device_number, unsigned int physical_sector);
@@ -113,7 +116,7 @@ int main(int argc, char** argv)
 		//WRITE
 		else if (!strcmp(cmd, "WRITE")) {
 			if (param >= 0) {
-				write_raid5_(param);
+				write_raid5(param);
 			} else {
 				printf("Error, Invalid sector number\n");
 			}
@@ -163,7 +166,7 @@ void read_raid5(unsigned int logical_sector)
 
 
 	// Try reading from original sector
-	if (devices[data_device].is_open && read_sector(data_device, physical_sector)) {
+	if (read_sector(data_device, physical_sector)) {
 		return;
 	}
 	// Sector device is dead or read failed.
@@ -172,7 +175,7 @@ void read_raid5(unsigned int logical_sector)
 	// (it's possible to restore the logical sector using the parity block)
 	for (unsigned int i = 0; i < device_count; ++i) {
 		if (i == data_device) continue;
-		if (!devices[i].is_open  || !read_sector(i, physical_sector)) {
+		if (!read_sector(i, physical_sector)) {
 			// Logical sector can't be restored.
 			print_bad_operation(i);
 			return;
@@ -180,6 +183,108 @@ void read_raid5(unsigned int logical_sector)
 	}
 }
 
+void write_raid5(unsigned int logical_sector)
+{
+	unsigned int data_device;
+	unsigned int parity_device;
+	unsigned int physical_sector;
+	calc_offsets_raid5(logical_sector, &data_device, &parity_device, &physical_sector);
+
+	// If parity device is closed
+	if (!devices[parity_device].is_open) {
+		// Try writing to the data device directly, and finish.
+		// (there is nothing else to do if it fails)
+		if (!write_sector(data_device, physical_sector)) {
+			print_bad_operation(data_device);
+		}
+		return ;
+	}
+	assert(devices[parity_device].is_open);
+
+	// If data device is closed
+	if (!devices[data_device].is_open) {
+		// parity can only be updated by a "slow write"
+		slow_write(data_device, parity_device, physical_sector);
+		return;
+	}
+
+	//NOTE: I know this code looks weird,
+	// but it had to be this way in order to follow the instructions
+	// that stated that operations should be carried out in order of device numbers.
+	if (data_device < parity_device) {
+		if (!read_sector(data_device, physical_sector)) {
+			slow_write(data_device, parity_device, physical_sector);
+			return;
+		}
+		if (!write_sector(data_device, physical_sector)) {
+			// Since the old data was read, the parity can still be updated efficiently.
+			if (!read_sector(parity_device, physical_sector)
+					|| !write_sector(parity_device, physical_sector)) {
+				print_bad_operation(parity_device);
+				return;
+			}
+		}
+		// Data was written successfully.
+		// Try to update parity. (but don't report failure).
+		read_sector(parity_device, physical_sector);
+		write_sector(parity_device, physical_sector);
+		return;
+	}
+
+	assert(parity_device < data_device);
+
+	if (!read_sector(parity_device, physical_sector)
+			|| !write_sector(parity_device, physical_sector)) {
+		// Parity can't be updated, so just write the new data
+		// (no need to read the old data)
+		if (!write_sector(data_device, physical_sector)) {
+			print_bad_operation(data_device);
+		}
+		return;
+	}
+
+	if (read_sector(data_device, physical_sector)) {
+		// Since the old data was read, then the parity could actually be updated,
+		// and the data is logically written.
+		// So just try to write the data to it's intended sector,
+		// but it doesn't matter if the write is successful or not.
+		write_sector(data_device, physical_sector);
+		return;
+	} else {
+		// Old data can't be read, so the parity block wasn't actually updated.
+		// Try updating it by a "slow write".
+		slow_write(data_device, parity_device, physical_sector);
+		return;
+	}
+
+}
+
+void slow_write(unsigned int data_device,
+		unsigned int parity_device,
+		unsigned int physical_sector)
+// Write new data to parity block, without having the old data.
+{
+	for (unsigned int i = 0; i < device_count; ++i)
+	{
+		// Skip data device
+		if (i == data_device) continue;
+
+		if (i == parity_device) {
+			if (!write_sector(i, physical_sector)) {
+				print_bad_operation(i);
+				return;
+			}
+		} else {
+			if (!read_sector(i, physical_sector)) {
+				print_bad_operation(i);
+				return;
+			}
+		}
+	}
+}
+
+//NOTE: I implemented write_raid5 before clarifications about operation order were given by the TA.
+// This is the old implementation, and i left it here just for reference.
 void write_raid5_(unsigned int logical_sector)
 {
 	unsigned int data_device;
@@ -217,7 +322,6 @@ void write_raid5_(unsigned int logical_sector)
 
 			// Read the old data, in order to update parity block later.
 			if (read_sector(data_device, physical_sector)) {
-				//TODO: reorder writes??
 				// Now write new data.
 				// Note: return value isn't checked, because whether
 				// the operation succeeds or not, the parity block still has to be updated.
@@ -279,6 +383,10 @@ void calc_offsets_raid5(unsigned int logical_sector,
 	// Device number on which the requested data block is stored
 	*data_device = data_block_num % (device_count - 1);
 	*data_device += (*data_device >= *parity_device) ? 1 : 0;
+
+	assert(0 <= *data_device && *data_device < device_count);
+	assert(0 <= *parity_device && *parity_device < device_count);
+	assert(*parity_device != *data_device);
 }
 
 void print_operation(unsigned int device_number, unsigned int physical_sector)
@@ -292,10 +400,18 @@ void print_bad_operation(unsigned int device_number)
 }
 
 bool read_sector(unsigned int device_number, unsigned int physical_sector)
+//
+// Try reading a physical sector from a given device.
+// If the device is closed, FALSE is returned.
+// If an error happens, a message is printed, the device is closed, and FALSE is returned.
+// Otherwise an operation message is printed, and TRUE is returned.
+//
 {
 	device* dev = &devices[device_number];
 
-	assert(dev->is_open);
+	if (!dev->is_open) {
+		return FALSE;
+	}
 
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
 		printf("Error seeking to sector %d in device %s: %s\n", physical_sector, dev->path, strerror(errno));
@@ -316,10 +432,18 @@ bool read_sector(unsigned int device_number, unsigned int physical_sector)
 }
 
 bool write_sector(unsigned int device_number, unsigned int physical_sector)
+//
+// Try writing a physical sector to a given device.
+// If the device is closed, FALSE is returned.
+// If an error happens, a message is printed, the device is closed, and FALSE is returned.
+// Otherwise an operation message is printed, and TRUE is returned.
+//
 {
 	device* dev = &devices[device_number];
 
-	assert(dev->is_open);
+	if (!dev->is_open) {
+		return FALSE;
+	}
 
 	if (-1 == lseek(dev->fd, physical_sector * SECTOR_SIZE, SEEK_SET)) {
 		printf("Error seeking to sector %d in device %s: %s\n", physical_sector, dev->path, strerror(errno));
