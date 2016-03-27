@@ -44,6 +44,10 @@ void try_reopen_device(unsigned int device_number);
 void close_device(unsigned int device_number);
 void read_raid5(unsigned int logical_sector);
 void write_raid5(unsigned int logical_sector);
+void calc_offsets_raid5(unsigned int logical_sector,
+		unsigned int* data_device, unsigned int*
+		parity_device, unsigned int*
+		physical_sector);
 void print_operation(unsigned int device_number, unsigned int physical_sector);
 void print_bad_operation(unsigned int device_number);
 bool read_sector(unsigned int device_number, unsigned int physical_sector);
@@ -152,19 +156,11 @@ void close_device(unsigned int device_number)
 
 void read_raid5(unsigned int logical_sector)
 {
-	// Number of the block on which the data of the logical sector is placed.
-	unsigned int data_block_num = logical_sector / SECTORS_PER_BLOCK;
-	// Offset of the sector within the block
-	unsigned int data_sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
-	// The stripe on which the block is placed
-	unsigned int stripe_num = data_block_num / (device_count - 1);
-	// Offset of physical sector
-	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + data_sector_block_offset;
-	// Device number of on which the parity block is located
-	unsigned int parity_device =  ((device_count - 1) - stripe_num) % device_count;
-	// Device number on which the requested data block is stored
-	unsigned int data_device = data_block_num % (device_count - 1);
-	data_device += (data_device >= parity_device) ? 1 : 0;
+	unsigned int data_device;
+	unsigned int parity_device;
+	unsigned int physical_sector;
+	calc_offsets_raid5(logical_sector, &data_device, &parity_device, &physical_sector);
+
 
 	// Try reading from original sector
 	if (devices[data_device].is_open && read_sector(data_device, physical_sector)) {
@@ -186,19 +182,10 @@ void read_raid5(unsigned int logical_sector)
 
 void write_raid5(unsigned int logical_sector)
 {
-	// Number of the block on which the data of the logical sector is placed.
-	unsigned int data_block_num = logical_sector / SECTORS_PER_BLOCK;
-	// Offset of the sector within the block
-	unsigned int data_sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
-	// The stripe on which the block is placed
-	unsigned int stripe_num = data_block_num / (device_count - 1);
-	// Offset of physical sector
-	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + data_sector_block_offset;
-	// Device number of on which the parity block is located
-	unsigned int parity_device =  ((device_count - 1) - stripe_num) % device_count;
-	// Device number on which the requested data block is stored
-	unsigned int data_device = data_block_num % (device_count - 1);
-	data_device += (data_device >= parity_device) ? 1 : 0;
+	unsigned int data_device;
+	unsigned int parity_device;
+	unsigned int physical_sector;
+	calc_offsets_raid5(logical_sector, &data_device, &parity_device, &physical_sector);
 
 	// Try accessing sector device
 	if (devices[data_device].is_open) {
@@ -266,6 +253,32 @@ void write_raid5(unsigned int logical_sector)
 		// Parity update failed.
 		print_bad_operation(parity_device);
 	}
+}
+
+void calc_offsets_raid5(unsigned int logical_sector,
+		unsigned int* data_device, unsigned int*
+		parity_device, unsigned int*
+		physical_sector)
+//
+// Given a logical sector,
+// calculate the device number and physical sector offset that store it,
+// and the corresponding parity-block device.
+//
+{
+	// Number of the block on which the data of the logical sector is placed.
+	unsigned int data_block_num = logical_sector / SECTORS_PER_BLOCK;
+	// Offset of the sector within the block
+	unsigned int data_sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	// The stripe on which the block is placed
+	unsigned int stripe_num = data_block_num / (device_count - 1);
+
+	// Offset of physical sector
+	*physical_sector = stripe_num * SECTORS_PER_BLOCK + data_sector_block_offset;
+	// Device number of on which the parity block is located
+	*parity_device =  ((device_count - 1) - stripe_num) % device_count;
+	// Device number on which the requested data block is stored
+	*data_device = data_block_num % (device_count - 1);
+	*data_device += (*data_device >= *parity_device) ? 1 : 0;
 }
 
 void print_operation(unsigned int device_number, unsigned int physical_sector)
