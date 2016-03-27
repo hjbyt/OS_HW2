@@ -43,7 +43,7 @@ char buffer[SECTOR_SIZE] = {0};
 void try_reopen_device(unsigned int device_number);
 void close_device(unsigned int device_number);
 void read_raid5(unsigned int logical_sector);
-void write_raid5(unsigned int logical_sector);
+void write_raid5_(unsigned int logical_sector);
 void calc_offsets_raid5(unsigned int logical_sector,
 		unsigned int* data_device, unsigned int*
 		parity_device, unsigned int*
@@ -113,7 +113,7 @@ int main(int argc, char** argv)
 		//WRITE
 		else if (!strcmp(cmd, "WRITE")) {
 			if (param >= 0) {
-				write_raid5(param);
+				write_raid5_(param);
 			} else {
 				printf("Error, Invalid sector number\n");
 			}
@@ -180,7 +180,7 @@ void read_raid5(unsigned int logical_sector)
 	}
 }
 
-void write_raid5(unsigned int logical_sector)
+void write_raid5_(unsigned int logical_sector)
 {
 	unsigned int data_device;
 	unsigned int parity_device;
