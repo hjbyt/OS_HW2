@@ -152,22 +152,22 @@ void close_device(unsigned int device_number)
 
 void read_raid5(unsigned int logical_sector)
 {
-	// Number of the block on which the logical sector is placed.
-	unsigned int block_num = logical_sector / SECTORS_PER_BLOCK;
+	// Number of the block on which the data of the logical sector is placed.
+	unsigned int data_block_num = logical_sector / SECTORS_PER_BLOCK;
 	// Offset of the sector within the block
-	unsigned int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	unsigned int data_sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
 	// The stripe on which the block is placed
-	unsigned int stripe_num = block_num / (device_count - 1);
+	unsigned int stripe_num = data_block_num / (device_count - 1);
 	// Offset of physical sector
-	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
+	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + data_sector_block_offset;
 	// Device number of on which the parity block is located
 	unsigned int parity_device =  ((device_count - 1) - stripe_num) % device_count;
-	// Device number on which the requested logical sector is stored
-	unsigned int sector_device = block_num % (device_count - 1);
-	sector_device += (sector_device >= parity_device) ? 1 : 0;
+	// Device number on which the requested data block is stored
+	unsigned int data_device = data_block_num % (device_count - 1);
+	data_device += (data_device >= parity_device) ? 1 : 0;
 
 	// Try reading from original sector
-	if (devices[sector_device].is_open && read_sector(sector_device, physical_sector)) {
+	if (devices[data_device].is_open && read_sector(data_device, physical_sector)) {
 		return;
 	}
 	// Sector device is dead or read failed.
@@ -175,7 +175,7 @@ void read_raid5(unsigned int logical_sector)
 	// Try reading the other devices.
 	// (it's possible to restore the logical sector using the parity block)
 	for (unsigned int i = 0; i < device_count; ++i) {
-		if (i == sector_device) continue;
+		if (i == data_device) continue;
 		if (!devices[i].is_open  || !read_sector(i, physical_sector)) {
 			// Logical sector can't be restored.
 			print_bad_operation(i);
@@ -186,29 +186,29 @@ void read_raid5(unsigned int logical_sector)
 
 void write_raid5(unsigned int logical_sector)
 {
-	// Number of the block on which the logical sector is placed.
-	unsigned int block_num = logical_sector / SECTORS_PER_BLOCK;
+	// Number of the block on which the data of the logical sector is placed.
+	unsigned int data_block_num = logical_sector / SECTORS_PER_BLOCK;
 	// Offset of the sector within the block
-	unsigned int sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
+	unsigned int data_sector_block_offset = logical_sector % SECTORS_PER_BLOCK;
 	// The stripe on which the block is placed
-	unsigned int stripe_num = block_num / (device_count - 1);
+	unsigned int stripe_num = data_block_num / (device_count - 1);
 	// Offset of physical sector
-	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + sector_block_offset;
+	unsigned int physical_sector = stripe_num * SECTORS_PER_BLOCK + data_sector_block_offset;
 	// Device number of on which the parity block is located
 	unsigned int parity_device =  ((device_count - 1) - stripe_num) % device_count;
-	// Device number on which the requested logical sector is stored
-	unsigned int sector_device = block_num % (device_count - 1);
-	sector_device += (sector_device >= parity_device) ? 1 : 0;
+	// Device number on which the requested data block is stored
+	unsigned int data_device = data_block_num % (device_count - 1);
+	data_device += (data_device >= parity_device) ? 1 : 0;
 
 	// Try accessing sector device
-	if (devices[sector_device].is_open) {
+	if (devices[data_device].is_open) {
 		// If parity device isn't open
 		if (!devices[parity_device].is_open) {
 			// Then there is no need to read the old data before writing,
 			// so simply attempt writing to the sector device.
-			if (!write_sector(sector_device, physical_sector)) {
+			if (!write_sector(data_device, physical_sector)) {
 				// Writing failed
-				print_bad_operation(sector_device);
+				print_bad_operation(data_device);
 			}
 			// Whether writing was successful or not, there's nothing else to be done.
 			return;
@@ -220,21 +220,21 @@ void write_raid5(unsigned int logical_sector)
 				// Can't read parity, so there is no need to read the old data before writing
 				// (because parity can't be updated),
 				// so simply attempt writing to the sector device.
-				if (!write_sector(sector_device, physical_sector)) {
+				if (!write_sector(data_device, physical_sector)) {
 					// Writing failed
-					print_bad_operation(sector_device);
+					print_bad_operation(data_device);
 				}
 				// Whether writing was successful or not, there's nothing else to be done.
 				return;
 			}
 
 			// Read the old data, in order to update parity block later.
-			if (read_sector(sector_device, physical_sector)) {
+			if (read_sector(data_device, physical_sector)) {
 				//TODO: reorder writes??
 				// Now write new data.
 				// Note: return value isn't checked, because whether
 				// the operation succeeds or not, the parity block still has to be updated.
-				write_sector(sector_device, physical_sector);
+				write_sector(data_device, physical_sector);
 
 				// new_parity = old_parity XOR old_data XOR new_data
 				// Write new parity
@@ -252,7 +252,7 @@ void write_raid5(unsigned int logical_sector)
 	// so we must read all other devices in order to update parity.
 	for (unsigned int i = 0; i < device_count; ++i)
 	{
-		if (i == sector_device || i == parity_device) continue;
+		if (i == data_device || i == parity_device) continue;
 		if (!devices[i].is_open || !read_sector(i, physical_sector)) {
 			// Can't calculate new parity.
 			print_bad_operation(i);
