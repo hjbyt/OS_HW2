@@ -154,6 +154,9 @@ void try_reopen_device(unsigned int device_number)
 }
 
 void close_device(unsigned int device_number)
+//
+// Close the device if it's open. otherwise do nothing.
+//
 {
 	device* dev = &devices[device_number];
 	if (dev->is_open) {
