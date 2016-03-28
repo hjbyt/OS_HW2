@@ -137,14 +137,19 @@ int main(int argc, char** argv)
 void try_reopen_device(unsigned int device_number)
 {
 	assert(device_number < device_count);
-
-	close_device(device_number);
 	device* dev = &devices[device_number];
-	dev->fd = open(dev->path, O_RDWR);
-	if (dev->fd == -1) {
+
+	// Open device
+	int fd = open(dev->path, O_RDWR);
+	if (fd == -1) {
 		printf("Error, failed to open device %s. (%s)\n", dev->path, strerror(errno));
 		return;
 	}
+
+	// Close previous device,
+	// And update data structure.
+	close_device(device_number);
+	dev->fd = fd;
 	dev->is_open = TRUE;
 }
 
