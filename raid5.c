@@ -45,9 +45,9 @@ void close_device(unsigned int device_number);
 void read_raid5(unsigned int logical_sector);
 void write_raid5(unsigned int logical_sector);
 void calc_offsets_raid5(unsigned int logical_sector,
-		unsigned int* data_device, unsigned int*
-		parity_device, unsigned int*
-		physical_sector);
+		unsigned int* data_device,
+		unsigned int* parity_device,
+		unsigned int* physical_sector);
 void slow_write(unsigned int data_device,
 		unsigned int parity_device,
 		unsigned int physical_sector);
@@ -368,9 +368,9 @@ void write_raid5_(unsigned int logical_sector)
 }
 
 void calc_offsets_raid5(unsigned int logical_sector,
-		unsigned int* data_device, unsigned int*
-		parity_device, unsigned int*
-		physical_sector)
+		unsigned int* data_device,
+		unsigned int* parity_device,
+		unsigned int* physical_sector)
 //
 // Given a logical sector,
 // calculate the device number and physical sector offset that store it,
