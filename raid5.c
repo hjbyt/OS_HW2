@@ -387,7 +387,7 @@ void calc_offsets_raid5(unsigned int logical_sector,
 	// Offset of physical sector
 	*physical_sector = stripe_num * SECTORS_PER_BLOCK + data_sector_block_offset;
 	// Device number of on which the parity block is located
-	*parity_device =  ((device_count - 1) - stripe_num) % device_count;
+	*parity_device =  (device_count - 1) - (stripe_num % device_count) ;
 	// Device number on which the requested data block is stored
 	*data_device = data_block_num % (device_count - 1);
 	*data_device += (*data_device >= *parity_device) ? 1 : 0;
